@@ -86,6 +86,11 @@
   }
   .input-bar .spacer{flex:1}
 
+  .hint{
+    padding:9px 14px;border-top:1px solid var(--line);
+    color:var(--muted);font-size:.78rem;
+  }
+
   button{
     font-family:inherit;font-size:.84rem;cursor:pointer;
     background:var(--surface-2);color:var(--text);
@@ -174,6 +179,7 @@
         placeholder="Paste text containing indicators of compromise…
 
 Already-defanged input is understood automatically (hxxp://, 1.2.3[.]4, user[@]domain)."></textarea>
+      <div class="hint">Analyzes automatically as you type or paste — no button needed.</div>
       <div class="input-bar">
         <label class="toggle">
           <input type="checkbox" id="defang" checked>
@@ -420,6 +426,8 @@ $("exportJson").addEventListener("click", ()=>{
 $("clear").addEventListener("click", ()=>{ $("input").value=""; run(); $("input").focus(); });
 
 $("sample").addEventListener("click", ()=>{
+  if($("input").value.trim() &&
+     !confirm("Replace the current text with the sample incident?")) return;
   $("input").value = SAMPLE;
   run();
 });
