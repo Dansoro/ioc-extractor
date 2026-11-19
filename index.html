@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IOC Extractor &amp; Defanger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0E1524;
+    --surface:#161F33;
+    --surface-2:#1D2840;
+    --line:#2A3650;
+    --text:#E6ECF5;
+    --muted:#8795AC;
+    --accent:#E0A33E;
+    --accent-dim:#5A4a24;
+
+    --ipv4:#4FC3D9;
+    --ipv6:#5BD6B0;
+    --domain:#E0A33E;
+    --url:#E8864C;
+    --email:#B892E8;
+    --hash:#8CD17D;
+    --cve:#E86A6A;
+
+    --radius:10px;
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:"Space Grotesk",system-ui,sans-serif;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 22px 64px}
+
+  /* ---- header ---- */
+  header{
+    display:flex;align-items:flex-end;justify-content:space-between;
+    gap:24px;flex-wrap:wrap;
+    padding-bottom:20px;margin-bottom:24px;
+    border-bottom:1px solid var(--line);
+  }
+  .brand h1{
+    font-size:1.55rem;font-weight:700;letter-spacing:-0.02em;margin:0;
+  }
+  .brand p{margin:4px 0 0;color:var(--muted);font-size:.9rem;max-width:52ch}
+  .brand .dot{color:var(--accent)}
+
+  .counter{display:flex;align-items:baseline;gap:10px;white-space:nowrap}
+  .counter .num{
+    font-family:"JetBrains Mono",monospace;
+    font-size:2.6rem;font-weight:500;line-height:1;color:var(--accent);
+    font-variant-numeric:tabular-nums;
+  }
+  .counter .lbl{color:var(--muted);font-size:.82rem}
+
+  /* ---- layout ---- */
+  .grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:22px;align-items:start}
+  @media(max-width:860px){.grid{grid-template-columns:1fr}}
+
+  /* ---- input panel ---- */
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}
+  .input-panel{display:flex;flex-direction:column;position:sticky;top:20px}
+  @media(max-width:860px){.input-panel{position:static}}
+
+  textarea{
+    width:100%;min-height:360px;resize:vertical;
+    background:transparent;border:0;outline:none;
+    color:var(--text);
+    font-family:"JetBrains Mono",monospace;font-size:.86rem;line-height:1.6;
+    padding:18px;
+  }
+  textarea::placeholder{color:#55617A}
+
+  .input-bar{
+    display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+    padding:12px 14px;border-top:1px solid var(--line);
+  }
+  .input-bar .spacer{flex:1}
+
+  button{
+    font-family:inherit;font-size:.84rem;cursor:pointer;
+    background:var(--surface-2);color:var(--text);
+    border:1px solid var(--line);border-radius:7px;
+    padding:7px 13px;transition:background .12s,border-color .12s;
+  }
+  button:hover{background:#263351;border-color:#3a496a}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  button.ghost{background:transparent}
+  button.primary{background:var(--accent);color:#1a1205;border-color:var(--accent);font-weight:600}
+  button.primary:hover{background:#ecb257}
+
+  .toggle{display:inline-flex;align-items:center;gap:9px;cursor:pointer;user-select:none;font-size:.84rem;color:var(--muted)}
+  .toggle input{position:absolute;opacity:0;width:0;height:0}
+  .switch{width:38px;height:22px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);position:relative;transition:background .15s}
+  .switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--muted);transition:transform .15s,background .15s}
+  .toggle input:checked + .switch{background:var(--accent-dim);border-color:var(--accent)}
+  .toggle input:checked + .switch::after{transform:translateX(16px);background:var(--accent)}
+  .toggle input:focus-visible + .switch{outline:2px solid var(--accent);outline-offset:2px}
+
+  /* ---- results ---- */
+  .results{display:flex;flex-direction:column;gap:14px;min-width:0}
+
+  .empty{
+    border:1px dashed var(--line);border-radius:var(--radius);
+    padding:48px 28px;text-align:center;color:var(--muted);
+  }
+  .empty strong{color:var(--text);font-weight:600;display:block;margin-bottom:6px}
+
+  .card{overflow:hidden}
+  .card header{
+    all:unset;display:flex;align-items:center;gap:10px;
+    padding:11px 14px;border-bottom:1px solid var(--line);
+  }
+  .card .marker{width:9px;height:9px;border-radius:50%;flex:none}
+  .card .name{font-weight:600;font-size:.92rem}
+  .card .count{
+    font-family:"JetBrains Mono",monospace;font-size:.78rem;color:var(--muted);
+    background:var(--surface-2);border-radius:999px;padding:1px 9px;
+  }
+  .card .copy{margin-left:auto;font-size:.78rem;padding:5px 11px}
+
+  ul{list-style:none;margin:0;padding:6px}
+  li{
+    font-family:"JetBrains Mono",monospace;font-size:.84rem;
+    padding:6px 10px;border-radius:6px;word-break:break-all;
+    display:flex;align-items:center;gap:10px;
+  }
+  li:hover{background:var(--surface-2)}
+  li .ix{color:#4A5674;font-size:.72rem;flex:none;width:22px;text-align:right;font-variant-numeric:tabular-nums}
+
+  footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:.8rem}
+  footer code{font-family:"JetBrains Mono",monospace;color:#9fb0cc}
+  footer a{color:var(--accent);text-decoration:none}
+  footer a:hover{text-decoration:underline}
+
+  .toast{
+    position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--accent);color:#1a1205;font-weight:600;font-size:.84rem;
+    padding:9px 18px;border-radius:8px;opacity:0;pointer-events:none;
+    transition:opacity .18s,transform .18s;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>IOC Extractor <span class="dot">/</span> Defanger</h1>
+      <p>Paste any report, alert, or email. Indicators are pulled out, de-duplicated,
+         and defanged for safe sharing. Everything runs in your browser — nothing is uploaded.</p>
+    </div>
+    <div class="counter">
+      <span class="num" id="total">0</span>
+      <span class="lbl">indicators<br>found</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <!-- input -->
+    <div class="panel input-panel">
+      <textarea id="input" spellcheck="false"
+        placeholder="Paste text containing indicators of compromise…
+
+Already-defanged input is understood automatically (hxxp://, 1.2.3[.]4, user[@]domain)."></textarea>
+      <div class="input-bar">
+        <label class="toggle">
+          <input type="checkbox" id="defang" checked>
+          <span class="switch"></span>
+          Defang output
+        </label>
+        <div class="spacer"></div>
+        <button class="ghost" id="sample">Load sample</button>
+        <button class="ghost" id="clear">Clear</button>
+        <button class="primary" id="copyAll">Copy all</button>
+        <button id="exportJson">Export JSON</button>
+      </div>
+    </div>
+
+    <!-- results -->
+    <div class="results" id="results">
+      <div class="empty" id="empty">
+        <strong>No indicators yet</strong>
+        Paste some text to begin, or load the sample incident.
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Extracts IPv4 / IPv6, URLs, domains, emails, MD5 / SHA-1 / SHA-256 hashes, and CVE IDs.
+    Pattern-based, so treat results as leads to verify — version strings like <code>1.2.3.4</code>
+    can read as an IP. Defensive and educational use only.
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+/* ---------- category definitions (order = display + match priority) ---------- */
+const CATEGORIES = [
+  {key:"sha256", name:"SHA-256",  color:"var(--hash)"},
+  {key:"sha1",   name:"SHA-1",    color:"var(--hash)"},
+  {key:"md5",    name:"MD5",      color:"var(--hash)"},
+  {key:"url",    name:"URLs",     color:"var(--url)"},
+  {key:"ipv4",   name:"IPv4",     color:"var(--ipv4)"},
+  {key:"ipv6",   name:"IPv6",     color:"var(--ipv6)"},
+  {key:"domain", name:"Domains",  color:"var(--domain)"},
+  {key:"email",  name:"Emails",   color:"var(--email)"},
+  {key:"cve",    name:"CVEs",     color:"var(--cve)"},
+];
+
+/* file extensions that masquerade as domains (evil.pdf) */
+const FILE_EXT = new Set(["pdf","exe","dll","doc","docx","xls","xlsx","ppt","pptx",
+  "zip","rar","7z","txt","rtf","csv","png","jpg","jpeg","gif","bmp","svg","ico",
+  "js","ts","py","php","html","htm","css","json","xml","bat","ps1","vbs","sh",
+  "dmg","iso","img","bin","dat","log","tmp","lnk","scr","jar","apk","msi"]);
+
+/* ---------- refang: normalise defanged input before matching ---------- */
+function refang(s){
+  return s
+    .replace(/\[\.\]|\(\.\)|\{\.\}|\[dot\]/gi, ".")
+    .replace(/\[@\]|\(@\)|\[at\]/gi, "@")
+    .replace(/h(?:xx|XX)p(s?)/gi, "http$1")
+    .replace(/\[:\]/g, ":")
+    .replace(/\[\/\]/g, "/")
+    .replace(/\[:\/\/\]/g, "://");
+}
+
+/* ---------- defang: make an indicator safe to paste ---------- */
+function defang(value, type){
+  switch(type){
+    case "url":   return value.replace(/^https?/i, m => m.toLowerCase()==="https"?"hxxps":"hxxp").replace(/\./g,"[.]");
+    case "email": return value.replace(/@/g,"[@]").replace(/\./g,"[.]");
+    case "ipv6":  return value.replace(/:/g,"[:]");
+    case "ipv4":
+    case "domain":return value.replace(/\./g,"[.]");
+    default:      return value; // hashes, CVEs are never defanged
+  }
+}
+
+/* ---------- extraction ---------- */
+const RE = {
+  sha256:/\b[a-fA-F0-9]{64}\b/g,
+  sha1:  /\b[a-fA-F0-9]{40}\b/g,
+  md5:   /\b[a-fA-F0-9]{32}\b/g,
+  cve:   /\bCVE-\d{4}-\d{4,7}\b/gi,
+  email: /\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b/g,
+  url:   /\b(?:https?|ftp):\/\/[^\s<>"'\)\]]+/gi,
+  ipv4:  /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g,
+  domain:/\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}\b/g,
+};
+
+/* IPv6 is built from a full compression-aware alternation (zone IDs and
+   IPv4-mapped forms are not covered). Lookarounds keep "08:14" timestamps out. */
+RE.ipv6 = new RegExp("(?<![\\w:])(?:" + [
+  "(?:[A-Fa-f0-9]{1,4}:){7}[A-Fa-f0-9]{1,4}",
+  "(?:[A-Fa-f0-9]{1,4}:){1,7}:",
+  "(?:[A-Fa-f0-9]{1,4}:){1,6}:[A-Fa-f0-9]{1,4}",
+  "(?:[A-Fa-f0-9]{1,4}:){1,5}(?::[A-Fa-f0-9]{1,4}){1,2}",
+  "(?:[A-Fa-f0-9]{1,4}:){1,4}(?::[A-Fa-f0-9]{1,4}){1,3}",
+  "(?:[A-Fa-f0-9]{1,4}:){1,3}(?::[A-Fa-f0-9]{1,4}){1,4}",
+  "(?:[A-Fa-f0-9]{1,4}:){1,2}(?::[A-Fa-f0-9]{1,4}){1,5}",
+  "[A-Fa-f0-9]{1,4}:(?::[A-Fa-f0-9]{1,4}){1,6}",
+  ":(?:(?::[A-Fa-f0-9]{1,4}){1,7}|:)",
+].join("|") + ")(?![\\w:])", "g");
+
+function uniq(arr){ return [...new Set(arr)]; }
+
+function extract(raw){
+  const text = refang(raw);
+  const out = {};
+
+  out.sha256 = uniq((text.match(RE.sha256)||[]).map(h=>h.toLowerCase()));
+  // strip sha256 strings so their substrings aren't re-matched as sha1/md5
+  let residual = text.replace(RE.sha256, " ");
+  out.sha1 = uniq((residual.match(RE.sha1)||[]).map(h=>h.toLowerCase()));
+  residual = residual.replace(RE.sha1, " ");
+  out.md5  = uniq((residual.match(RE.md5)||[]).map(h=>h.toLowerCase()));
+
+  out.cve   = uniq((text.match(RE.cve)||[]).map(c=>c.toUpperCase()));
+  out.url   = uniq((text.match(RE.url)||[]).map(u=>u.replace(/[.,;)]+$/,"")));
+  out.email = uniq((text.match(RE.email)||[]).map(e=>e.toLowerCase()));
+  out.ipv4  = uniq(text.match(RE.ipv4)||[]);
+  out.ipv6  = uniq((text.match(RE.ipv6)||[]).filter(v=>v.includes("::")||v.split(":").length>=4));
+
+  out.domain = uniq(
+    (text.match(RE.domain)||[])
+      .map(d=>d.toLowerCase())
+      .filter(d=>{
+        const tld = d.split(".").pop();
+        return !FILE_EXT.has(tld) && !/^\d+$/.test(tld); // drop filenames and ip-like
+      })
+  );
+
+  return out;
+}
+
+/* ---------- rendering ---------- */
+const $ = id => document.getElementById(id);
+let current = {};
+
+function render(){
+  const defangOn = $("defang").checked;
+  const results = $("results");
+  const total = Object.values(current).reduce((n,a)=>n+a.length,0);
+  $("total").textContent = total;
+
+  if(total === 0){
+    results.innerHTML = `<div class="empty"><strong>No indicators yet</strong>
+      Paste some text to begin, or load the sample incident.</div>`;
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  for(const cat of CATEGORIES){
+    const items = current[cat.key] || [];
+    if(!items.length) continue;
+
+    const shown = items.map(v => defangOn ? defang(v, cat.key) : v);
+
+    const card = document.createElement("div");
+    card.className = "panel card";
+    card.innerHTML = `
+      <header>
+        <span class="marker" style="background:${cat.color}"></span>
+        <span class="name">${cat.name}</span>
+        <span class="count">${items.length}</span>
+        <button class="copy ghost" data-key="${cat.key}">Copy</button>
+      </header>
+      <ul>${shown.map((v,i)=>
+        `<li><span class="ix">${i+1}</span><span>${escapeHtml(v)}</span></li>`).join("")}</ul>`;
+    frag.appendChild(card);
+  }
+  results.innerHTML = "";
+  results.appendChild(frag);
+}
+
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, c =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+/* ---------- clipboard + export ---------- */
+function currentList(key){
+  const defangOn = $("defang").checked;
+  return (current[key]||[]).map(v => defangOn ? defang(v, key) : v);
+}
+
+function copyText(text, msg){
+  navigator.clipboard.writeText(text).then(()=>toast(msg)).catch(()=>toast("Copy failed"));
+}
+
+function toast(msg){
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=>t.classList.remove("show"), 1600);
+}
+
+/* ---------- events ---------- */
+function run(){ current = extract($("input").value); render(); }
+
+$("input").addEventListener("input", run);
+$("defang").addEventListener("change", render);
+
+$("results").addEventListener("click", e=>{
+  const btn = e.target.closest("button[data-key]");
+  if(!btn) return;
+  const list = currentList(btn.dataset.key);
+  if(list.length) copyText(list.join("\n"), `Copied ${list.length} ${btn.dataset.key}`);
+});
+
+$("copyAll").addEventListener("click", ()=>{
+  const blocks = [];
+  let n = 0;
+  for(const cat of CATEGORIES){
+    const list = currentList(cat.key);
+    if(!list.length) continue;
+    n += list.length;
+    blocks.push(`# ${cat.name} (${list.length})\n${list.join("\n")}`);
+  }
+  if(!n){ toast("Nothing to copy"); return; }
+  copyText(blocks.join("\n\n"), `Copied ${n} indicators`);
+});
+
+$("exportJson").addEventListener("click", ()=>{
+  const total = Object.values(current).reduce((s,a)=>s+a.length,0);
+  if(!total){ toast("Nothing to export"); return; }
+  const payload = {
+    generated: new Date().toISOString(),
+    defanged: $("defang").checked,
+    count: total,
+    indicators: Object.fromEntries(
+      CATEGORIES.map(c=>[c.key, currentList(c.key)]).filter(([,v])=>v.length)
+    )
+  };
+  const blob = new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "iocs.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast("Exported iocs.json");
+});
+
+$("clear").addEventListener("click", ()=>{ $("input").value=""; run(); $("input").focus(); });
+
+$("sample").addEventListener("click", ()=>{
+  $("input").value = SAMPLE;
+  run();
+});
+
+const SAMPLE =
+`Subject: Suspected phishing — reported by user
+
+Inbound connection from 185.220.101.47 (known tor-exit) at 2026-11-19T08:14Z.
+Lure link: hxxps://secure-login-verify[.]com/office365/auth?id=8842
+Secondary redirect to http://45.133.1.88/panel/
+
+Attachment invoice_scan.pdf
+  MD5:    44d88612fea8a8f36de82e1278abb02f
+  SHA256: 275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f
+
+Spoofed sender: billing@paypa1-support[.]net
+C2 beacon observed to 103[.]224[.]182[.]251 over tcp/443.
+Associated with CVE-2024-3400 exploitation.
+IPv6 callback seen: 2001:db8:dead:beef::1`;
+
+/* start focused */
+$("input").focus();
+</script>
+</body>
+</html>
